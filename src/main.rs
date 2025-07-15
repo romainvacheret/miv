@@ -39,10 +39,53 @@ fn quit_restore_mode(config: termios, stdout: &mut Stdout) {
     write!(stdout, "\x1b[?1049l").unwrap();
 }
 
+fn handle_char_normal(last_chars: &String, stdout: &mut Stdout, mode: &mut Mode) {
+    let last: &str = last_chars;
+    // TODO: need to check time if consecutive chars but not same moment
+    // TODO: need to remove from page content if command (before executing the command)
+    // TODO: how to do if there are several commands with same starts like j and jk?
+    match last {
+        name if name.ends_with("k") => write!(stdout, "\x1B[A").unwrap(),
+        name if name.ends_with("j") => write!(stdout, "\x1B[B").unwrap(),
+        name if name.ends_with("l") => write!(stdout, "\x1B[C").unwrap(),
+        name if name.ends_with("h") => write!(stdout, "\x1B[D").unwrap(),
+        name if name.ends_with("0") => write!(stdout, "\x1B[G").unwrap(),
+        name if name.ends_with("gg") => write!(stdout, "\x1B[1;1H").unwrap(),
+        name if name.ends_with("i") => *mode = Mode::INSERT,
+        _ => ()
+    }
+}
+
+fn handle_char_insert(last_chars: &String, stdout: &mut Stdout, mode: &mut Mode) {
+    let last: &str = last_chars;
+    match last {
+        // Escape character
+        name if name.ends_with("\x1B") => *mode = Mode::NORMAL,
+        _ => {
+            write!(stdout, "Just typed: {}\r\n", last_chars.chars().last().unwrap()).unwrap();
+        }
+    }
+}
+
+fn handle_char(last_chars: &String, stdout: &mut Stdout, mode: &mut Mode) {
+    match mode {
+        Mode::NORMAL => handle_char_normal(last_chars, stdout, mode),
+        Mode::INSERT => handle_char_insert(last_chars, stdout, mode)
+    }
+    stdout.flush().unwrap();
+}
+
+enum Mode {
+    NORMAL,
+    INSERT
+}
+
 fn main() {
 let original_mode = enable_raw_mode();
     let mut stdin = File::open("/dev/stdin").unwrap();
     let mut stdout = io::stdout();
+    let mut past_chars = String::from("");
+    let mut mode: Mode = Mode::NORMAL;
 
     start_tui(&mut stdout);
     writeln!(stdout, "Start typing (press 'q' to quit):").unwrap();
@@ -53,8 +96,9 @@ let original_mode = enable_raw_mode();
         stdin.read_exact(&mut buffer).unwrap();
         let byte = buffer[0];
 
-        write!(stdout, "Just typed: {}\r\n", byte as char).unwrap();
-        stdout.flush().unwrap();
+
+        past_chars.push(byte as char);
+        handle_char(&past_chars, &mut stdout, &mut mode);
 
         if byte == b'q' {
             break;
