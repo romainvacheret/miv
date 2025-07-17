@@ -2,8 +2,10 @@ use std::fs::File;
 use std::io::{self, Write};
 
 use crate::key_bindings::InnerBehavior;
+use crate::logger::setup_logger;
 use crate::terminal::{enable_raw_mode, quit_restore_mode, start_tui};
 
+mod logger;
 mod terminal;
 mod key_bindings;
 mod display;
@@ -11,6 +13,8 @@ mod utils;
 
 
 fn main() {
+    setup_logger().unwrap();
+
     let original_mode = enable_raw_mode();
     let mut stdin = File::open("/dev/stdin").unwrap();
     let mut stdout = io::stdout();

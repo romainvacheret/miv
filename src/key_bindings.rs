@@ -1,11 +1,6 @@
 use std::{fs::File, io::{Read, Stdout, Write}};
 
-use crate::{display::{Renderer}, utils::Pos};
-
-enum Mode {
-    NORMAL,
-    INSERT
-}
+use crate::{display::Renderer, utils::{Mode, Pos}};
 
 pub struct InnerBehavior <'a> {
     mode: Mode,
@@ -152,7 +147,7 @@ impl <'a> InnerBehavior <'a> {
         let mut past_chars = String::from("");
         let mut renderer = Renderer::new();
 
-        renderer.render(&self.content, &mut self.stdout, &self.pos, true);
+        renderer.render(&self.content, &mut self.stdout, &self.pos, true, &self.mode);
 
         loop {
             let mut buffer = [0u8; 1];
@@ -162,7 +157,7 @@ impl <'a> InnerBehavior <'a> {
             past_chars.push(byte as char);
             let rerender = self.handle_char(&past_chars);
 
-            renderer.render(&self.content, &mut self.stdout, &self.pos, rerender);
+            renderer.render(&self.content, &mut self.stdout, &self.pos, rerender, &self.mode);
 
             if byte == b'q' {
                 break;

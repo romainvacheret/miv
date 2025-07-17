@@ -1,16 +1,24 @@
-use std::io::{Stdout, Write};
+use std::{any::Any, io::{Stdout, Write}};
 
 
-use crate::utils::Pos;
+use crate::{terminal::get_terminal_size, utils::{Mode, Pos}};
 
 pub struct Renderer {
     info_pos_size: usize,
-    info_bar_size: usize
+    info_bar_size: usize,
+    win_size: (u16, u16)
 }
 
 impl Renderer {
     pub fn new() -> Self {
-        return Renderer { info_pos_size: 1, info_bar_size: 1 };
+        let result = get_terminal_size();
+
+        if result.is_err() {
+            // TODO: handle properly
+            panic!("Could not get the terminal size");
+        }
+
+        return Renderer { info_pos_size: 1, info_bar_size: 1, win_size: result.ok().unwrap() };
     }
 
     fn get_display(&self, content: &Vec<Vec<char>>) -> String {
@@ -38,18 +46,30 @@ impl Renderer {
         return full_content;
     }
 
-    pub fn render(&mut self, content: &Vec<Vec<char>>, stdout: &mut Stdout, current_pos: &Pos, full_render: bool) {
+    fn render_cursor(&self, stdout: &mut Stdout, current_pos: &Pos) {
+            write!(stdout, "\x1B[{};{}H", current_pos.row, current_pos.col + self.info_pos_size).unwrap();
+    }
+
+    fn render_info_bar(&mut self, stdout: &mut Stdout, mode: &Mode, current_pos: &Pos) {
+        let mode_string = format!(" {}", mode.to_text());
+        let pos_string = format!("{}:{} ", current_pos.row, current_pos.col);
+        // TODO: handle properly
+        let padding_size = (self.win_size.1 as usize - (mode_string.len() + pos_string.len())).try_into().expect("Should never be reached");
+        let content = format!("{}{}{}", mode_string, " ".repeat(padding_size), pos_string);
+        write!(stdout, "\x1B[{};0H{}", self.win_size.0, content).unwrap();
+    }
+
+    pub fn render(&mut self, content: &Vec<Vec<char>>, stdout: &mut Stdout, current_pos: &Pos, full_render: bool, mode: &Mode) {
         if full_render {
             // Number of character of last line number plus `COL_CHAR`
             self.info_pos_size = content.len().to_string().len() + 1;
 
             let full_content = self.get_display(content);
             // Clear entire screen, move cursor to top-left, 
-            // print content then goes back to cursor position
-            write!(stdout, "\x1B[2J\x1B[H{}\x1B[{};{}H", full_content, current_pos.row, current_pos.col + self.info_pos_size).unwrap();
-        } else {
-            write!(stdout, "\x1B[{};{}H", current_pos.row, current_pos.col + self.info_pos_size).unwrap();
-        }
+            write!(stdout, "\x1B[2J\x1B[H{}", full_content).unwrap();
+        } 
+        self.render_info_bar(stdout, mode, current_pos);
+        self.render_cursor(stdout, current_pos);
         stdout.flush().unwrap();
     }
 }

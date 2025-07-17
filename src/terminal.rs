@@ -1,5 +1,6 @@
 use std::os::unix::io::AsRawFd;
 use libc::{cfmakeraw, tcgetattr, tcsetattr, termios, TCSANOW};
+use log::{debug, error};
 use std::io::{self, Write, Stdout};
 
 pub fn start_tui(stdout: &mut Stdout) {
@@ -40,7 +41,7 @@ pub fn quit_restore_mode(config: termios, stdout: &mut Stdout) {
 // Generated
 #[repr(C)]
 #[derive(Debug)]
-struct Winsize {
+pub struct WinSize {
     ws_row: u16,
     ws_col: u16,
     ws_xpixel: u16,
@@ -48,23 +49,26 @@ struct Winsize {
 }
 
 // Generated
-pub fn terminal_size() -> io::Result<(u16, u16)> {
+pub fn get_terminal_size() -> io::Result<(u16, u16)> {
     let fd = io::stdout().as_raw_fd();
 
-    let mut size = Winsize {
-        ws_row: 0,
-        ws_col: 0,
-        ws_xpixel: 0,
-        ws_ypixel: 0,
+    let mut size = WinSize {
+        ws_row: 0, // nubmer of rows
+        ws_col: 0, // number of columns
+        ws_xpixel: 0, // width in pixels
+        ws_ypixel: 0, // height in pixels
     };
 
     let result = unsafe {
         libc::ioctl(fd, libc::TIOCGWINSZ, &mut size)
     };
 
+
     return if result == 0 {
+        debug!("Terminal size is: {:?}", size);
         Ok((size.ws_row, size.ws_col))
     } else {
+        error!("Enable to get the terminal size");
         Err(io::Error::last_os_error())
     };
 }

@@ -1,3 +1,16 @@
+pub enum Mode {
+    NORMAL,
+    INSERT
+}
+
+impl Mode {
+    pub fn to_text(&self) -> &str {
+        return match self {
+            Mode::NORMAL => "NORMAL",
+            Mode::INSERT => "INSERT"
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Pos {
