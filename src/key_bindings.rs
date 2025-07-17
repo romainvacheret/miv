@@ -18,7 +18,6 @@ pub struct InnerBehavior <'a> {
 impl <'a> InnerBehavior <'a> {
 
     pub fn new(stdin: &'a mut File, stdout: &'a mut Stdout) -> Self {
-        // return InnerBehavior { mode: Mode::NORMAL, content: Vec::from([vec!['\n', '\r']]),
         return InnerBehavior { mode: Mode::NORMAL, content: Vec::from([Vec::new()]),
             pos: Pos::new(1, 1), stdin: stdin, stdout: stdout }
     }
@@ -29,56 +28,50 @@ impl <'a> InnerBehavior <'a> {
         // TODO: need to remove from page content if command (before executing the command)
         // TODO: how to do if there are several commands with same starts like j and jk?
         return match last {
+            // TODO: j/k, keep col in mind when going up/down to go back to it
+            // even while going through smaller rows
             name if name.ends_with("k") && self.pos.row > 1 => {
-                write!(self.stdout, "\x1B[A").unwrap();
-                self.pos.row -= 1;
+                // `self.pos.row` starts at 1 but `Vec` indexing at 0
+                let above_len = self.content[self.pos.row - 2].len();
+                if above_len < self.content[self.pos.row - 1].len() {
+                    self.pos.col = above_len + 1;
+                }
 
-                // TODO: 
-                // let above_len = self.content.get(self.pos.row - 1).unwrap().len();
-                // if above_len < self.content.get(self.pos.row).unwrap().len() {
-                //     // TODO: change 2 by len of the pos bar
-                //     self.pos.col = above_len + 2;
-                // }
+                self.pos.row -= 1;
                 false
             },
             name if name.ends_with("j") && self.pos.row < self.content.len() => {
-                write!(self.stdout, "\x1B[B").unwrap();
+                // `Vec` indexing always 1 less than pos.row: cannot reach
+                // index `Vec::len`
+                let below_len = self.content[self.pos.row].len();
+                if below_len < self.content[self.pos.row - 1].len() {
+                    self.pos.col = below_len + 1;
+                }
                 self.pos.row += 1;
                 false
             },
-            name if name.ends_with("l") && self.pos.col < self.content.get(self.pos.row - 1).map(|row| {
-                // When opening blank file, does not contain a return line contrary to any other
-                // line. Handle that by checking if line contains `\n` and `\r`
-                let len = row.len();
-                return if len >= 2 { len - 2 } else { 0 }
-            }).unwrap() => {
-                write!(self.stdout, "\x1B[C").unwrap();
+            name if name.ends_with("l") && self.pos.col < self.content[self.pos.row - 1].len() => {
                 self.pos.col += 1;
                 false
             },
             name if name.ends_with("h") && self.pos.col > 1 => {
-                write!(self.stdout, "\x1B[D").unwrap();
                 self.pos.col -= 1;
                 false
             },
             name if name.ends_with("0") => {
-                write!(self.stdout, "\x1B[G").unwrap();
-                self.pos.col = 0;
+                self.pos.col = 1;
                 false
             }
             name if name.ends_with("gg") => {
-                write!(self.stdout, "\x1B[1;1H").unwrap();
                 self.pos.row = 1;
                 false
             },
             name if name.ends_with("$") => {
-                self.pos.col = self.content.get(self.pos.row - 1).unwrap().len();
-                write!(self.stdout, "\x1B[{}G", self.pos.col).unwrap();
+                self.pos.col = self.content[self.pos.row - 1].len();
                 false
             },
             name if name.ends_with("G") => {
                 self.pos.row = self.content.len();
-                write!(self.stdout, "\x1B[{};1H", self.pos.row).unwrap();
                 false
             },
             name if name.ends_with("i") => {
@@ -94,35 +87,54 @@ impl <'a> InnerBehavior <'a> {
     fn handle_char_insert(&mut self, last_chars: &String) -> bool {
         let last: &str = last_chars;
         return match last {
-            // Escape character
+            // Escape 
             name if name.ends_with("\x1B") => {
                 self.mode = Mode::NORMAL;
                 false
             },
             // Backspace
             name if name.ends_with("\x7F") => {
-                // Condition MUST be inside the match.
-                // If this condition is not met, will enter the default case
-                // which should not happen
+                // If is not on the first colomn, remove the character before 
                 if self.pos.col > 1 {
-                    self.content.get_mut(self.pos.row - 1).unwrap().remove(self.pos.col - 2);
+                    self.content[self.pos.row - 1].remove(self.pos.col - 2);
                     self.pos.col -= 1;
                     return true
+                // Else if is but also not the first row, concatenate content 
+                // of current line to the one above. Place cursor a the previous
+                // lenght of the line above
+                } else if self.pos.row > 1 {
+                    self.pos.col = self.content[self.pos.row - 2].len();
+                    let current_row = self.content.remove(self.pos.row - 1);
+                    let next_row = &mut self.content[self.pos.row - 2];
+                    let prev_len = next_row.len();
+                    next_row.extend(current_row);
+                    self.pos.row -= 1;
+                    self.pos.col = prev_len;
                 }
-                false
+                true
             }
-            // TODO: handle ENTER in the middle of a line
             name if name.ends_with("\r") => {
-                // Need to be at the START of a NEW line
-                self.content.get_mut(self.pos.row - 1).unwrap().insert(self.pos.col - 1, '\n');
-                self.content.get_mut(self.pos.row - 1).unwrap().insert(self.pos.col - 1, '\r');
-                self.content.insert(self.pos.row, Vec::new());
-                self.pos.row += 1;
-                self.pos.col = 1;
+                // If is the end of the line, create a new empty line below 
+                // and move to it
+                if self.pos.col == self.content[self.pos.row - 1].len() + 1 {
+                    self.content.insert(self.pos.row, Vec::new());
+                    self.pos.row += 1;
+                    self.pos.col = 1;
+                // Else create a new line with the content after the cursor and
+                // move to the start of the new line
+                } else {
+                    let current_length = self.content[self.pos.row - 1].len();
+                    let end_content: Vec<char> = self.content[self.pos.row - 1]
+                        .drain((self.pos.col - 1)..current_length)
+                        .collect();
+                    self.content.insert(self.pos.row, end_content);
+                    self.pos.row += 1;
+                    self.pos.col = 1;
+                }
                 true
             },
             _ => {
-                self.content.get_mut(self.pos.row - 1).unwrap().insert(self.pos.col - 1, last.chars().last().unwrap());
+                self.content[self.pos.row - 1].insert(self.pos.col - 1, last.chars().last().unwrap());
                 self.pos.col += 1;
                 true
             }
@@ -140,9 +152,7 @@ impl <'a> InnerBehavior <'a> {
         let mut past_chars = String::from("");
         let mut renderer = Renderer::new();
 
-        renderer.render(&self.content, &mut self.stdout, &self.pos);
-        // At the moment the flush is not done inside the renderer
-        self.stdout.flush().unwrap();
+        renderer.render(&self.content, &mut self.stdout, &self.pos, true);
 
         loop {
             let mut buffer = [0u8; 1];
@@ -152,12 +162,7 @@ impl <'a> InnerBehavior <'a> {
             past_chars.push(byte as char);
             let rerender = self.handle_char(&past_chars);
 
-            if rerender {
-                renderer.render(&self.content, &mut self.stdout, &self.pos);
-            }
-            // Should be done in the rendering in case it is not needed but 
-            // the cursor has changed position
-            self.stdout.flush().unwrap();
+            renderer.render(&self.content, &mut self.stdout, &self.pos, rerender);
 
             if byte == b'q' {
                 break;
