@@ -40,6 +40,7 @@ impl Renderer {
 
             row_content.push('\n');
             row_content.push('\r');
+
             return row_content.into_iter();
         }).collect();
 

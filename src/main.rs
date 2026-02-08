@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::io::{self, Write};
 
 use crate::key_bindings::InnerBehavior;
@@ -16,7 +15,7 @@ fn main() {
     setup_logger().unwrap();
 
     let original_mode = enable_raw_mode();
-    let mut stdin = File::open("/dev/stdin").unwrap();
+    let mut stdin = io::stdin();
     let mut stdout = io::stdout();
 
     start_tui(&mut stdout);
