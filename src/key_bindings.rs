@@ -1,10 +1,11 @@
-use std::{io::{Read, Stdin, Stdout}};
+use std::{io::{Read, Stdin, Stdout}, path::PathBuf};
 
-use crate::{display::Renderer, utils::{Mode, Pos}};
+use crate::{display::Renderer, utils::{io::{read_file, write_file}, Mode, Pos}};
 
 pub struct InnerBehavior <'a> {
     mode: Mode,
-    content: Vec<Vec<char>>,
+    content_path: Option<PathBuf>,
+    content: Vec<String>,
     pos: Pos,
     stdin: &'a mut Stdin,
     stdout: &'a mut Stdout,
@@ -12,10 +13,18 @@ pub struct InnerBehavior <'a> {
 }
 
 impl <'a> InnerBehavior <'a> {
-
-    pub fn new(stdin: &'a mut Stdin, stdout: &'a mut Stdout) -> Self {
-        return InnerBehavior { mode: Mode::NORMAL, content: Vec::from([Vec::new()]),
-            pos: Pos::new(1, 1), stdin: stdin, stdout: stdout, renderer: Renderer::new()}
+    pub fn new(stdin: &'a mut Stdin, stdout: &'a mut Stdout, content_path: Option<PathBuf>) -> Self {
+        return InnerBehavior { 
+            mode: Mode::NORMAL, 
+            content: content_path.as_ref().map_or_else(
+                || Vec::from([String::new()]),
+                |path| read_file(path)),
+            content_path,
+            pos: Pos::new(1, 1), 
+            stdin, 
+            stdout, 
+            renderer: Renderer::new()
+        }
     }
     
     fn handle_char_normal(&mut self, last_chars: &str) -> bool {
@@ -54,7 +63,12 @@ impl <'a> InnerBehavior <'a> {
             self.pos.row = self.content.len();
         } else if last_chars.ends_with("i") {
             self.mode = Mode::INSERT;
-        } 
+        } else if last_chars.ends_with("w") {
+            self.content_path.as_ref().inspect(|path| { 
+                let content = self.content.join("\n");
+                let _ = write_file(path, content);
+           });
+        }
 
         false
     }
@@ -79,7 +93,7 @@ impl <'a> InnerBehavior <'a> {
                 let current_row = self.content.remove(self.pos.row - 1);
                 let next_row = &mut self.content[self.pos.row - 2];
                 let prev_len = next_row.len();
-                next_row.extend(current_row);
+                next_row.push_str(&current_row);
                 self.pos.row -= 1;
                 self.pos.col = prev_len;
             }
@@ -88,14 +102,14 @@ impl <'a> InnerBehavior <'a> {
             // If is the end of the line, create a new empty line below 
             // and move to it
             if self.pos.col == self.content[self.pos.row - 1].len() + 1 {
-                self.content.insert(self.pos.row, Vec::new());
+                self.content.insert(self.pos.row, String::new());
                 self.pos.row += 1;
                 self.pos.col = 1;
             // Else create a new line with the content after the cursor and
             // move to the start of the new line
             } else {
                 let current_length = self.content[self.pos.row - 1].len();
-                let end_content: Vec<char> = self.content[self.pos.row - 1]
+                let end_content = self.content[self.pos.row - 1]
                     .drain((self.pos.col - 1)..current_length)
                     .collect();
                 self.content.insert(self.pos.row, end_content);

@@ -1,4 +1,4 @@
-use std::{any::Any, io::{Stdout, Write}};
+use std::{io::{Stdout, Write}};
 
 
 use crate::{terminal::get_terminal_size, utils::{Mode, Pos}};
@@ -21,11 +21,11 @@ impl Renderer {
         return Renderer { info_pos_size: 1, info_bar_size: 1, win_size: result.ok().unwrap() };
     }
 
-    fn get_display(&self, content: &Vec<Vec<char>>) -> String {
+    fn get_display(&self, content: &Vec<String>) -> String {
         // TODO: handle when text does not fit screen
         const COL_CHAR: char = '┃';
-        let full_content: String = content.iter().enumerate().flat_map(|(idx, row)|{
-            let mut row_content: Vec<char> = row.clone();
+        let full_content: String = content.iter().enumerate().map(|(idx, row)|{
+            let mut row_content = row.clone();
             let line_str: Vec<char> = (idx + 1).to_string().chars().collect();
 
             // We write the current line number padded with spaces to fit 
@@ -37,11 +37,9 @@ impl Renderer {
             }
             // Insert after the number of inserted digits
             row_content.insert(row_content.len() - row.len(), COL_CHAR);
+            row_content.push_str("\n\r");
 
-            row_content.push('\n');
-            row_content.push('\r');
-
-            return row_content.into_iter();
+            row_content
         }).collect();
 
         return full_content;
@@ -60,7 +58,7 @@ impl Renderer {
         write!(stdout, "\x1B[{};0H{}", self.win_size.0, content).unwrap();
     }
 
-    pub fn render(&mut self, content: &Vec<Vec<char>>, stdout: &mut Stdout, current_pos: &Pos, full_render: bool, mode: &Mode) {
+    pub fn render(&mut self, content: &Vec<String>, stdout: &mut Stdout, current_pos: &Pos, full_render: bool, mode: &Mode) {
         if full_render {
             // Number of character of last line number plus `COL_CHAR`
             self.info_pos_size = content.len().to_string().len() + 1;
