@@ -31,21 +31,18 @@ impl <'a> InnerBehavior <'a> {
         // TODO: need to check time if consecutive chars but not same moment
         // TODO: need to remove from page content if command (before executing the command)
         // TODO: how to do if there are several commands with same starts like j and jk?
-        // TODO: j/k, keep col in mind when going up/down to go back to it
-        // even while going through smaller rows
         if last_chars.ends_with("k") && self.pos.row > 1 {
-            // `self.pos.row` starts at 1 but `Vec` indexing at 0
-            let above_len = self.content[self.pos.row - 2].len();
-            if above_len < self.content[self.pos.row - 1].len() {
-                self.pos.col = above_len + 1;
+            let prev_len = self.content[self.pos.row - 2].len();
+
+            if self.pos.col - 1 >= prev_len {
+                self.pos.col = prev_len;
             }
             self.pos.row -= 1;
         } else if last_chars.ends_with("j") && self.pos.row < self.content.len() {
-            // `Vec` indexing always 1 less than pos.row: cannot reach
-            // index `Vec::len`
-            let below_len = self.content[self.pos.row].len();
-            if below_len < self.content[self.pos.row - 1].len() {
-                self.pos.col = below_len + 1;
+            let next_len = self.content[self.pos.row].len();
+
+            if self.pos.col - 1 >= next_len {
+                self.pos.col = next_len;
             }
             self.pos.row += 1;
         } else if last_chars.ends_with("l") && 
@@ -56,10 +53,20 @@ impl <'a> InnerBehavior <'a> {
         } else if last_chars.ends_with("0") {
             self.pos.col = 1;
         } else if last_chars.ends_with("gg") {
+            let top_len = self.content[0].len();
+
+            if self.pos.col - 1 >= top_len {
+                self.pos.col = top_len;
+            }
             self.pos.row = 1;
         } else if last_chars.ends_with("$") {
             self.pos.col = self.content[self.pos.row - 1].len();
         } else if last_chars.ends_with("G") {
+            let bottom_len = self.content[self.content.len() -1].len();
+
+            if self.pos.col - 1 >= bottom_len {
+                self.pos.col = bottom_len;
+            }
             self.pos.row = self.content.len();
         } else if last_chars.ends_with("i") {
             self.mode = Mode::INSERT;
